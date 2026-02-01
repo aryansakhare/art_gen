@@ -1,8 +1,9 @@
-🎨 Neural Style Transfer (NST) Web App
+🎨Neural Style Transfer Web App
+
 An interactive, AI-powered web application that uses Deep Learning to merge the content of one image with the artistic style of another. Transform your everyday photos into masterpieces inspired by Van Gogh, Picasso, and other iconic artists.
 
-🚀 Live Demo
-[click here](https://art-gen-84vq.onrender.com)
+🚀 Live Demo: 
+[click here ](https://art-gen-84vq.onrender.com)
 
 🧐 What is Neural Style Transfer?
 
@@ -26,6 +27,8 @@ Frontend: HTML5, CSS3 (Modern Responsive UI)
 
 Image Processing: Pillow (PIL), Torchvision
 
+Deployment: Render (with Gunicorn)
+
 ⚙️ How It Works
 
 Pre-processing: Images are resized and normalized to be compatible with the VGG19 model.
@@ -42,12 +45,12 @@ Optimization: We use the L-BFGS optimizer to iteratively update the pixels of th
 
 💻 Local Installation
 
-To run this project on your local machine, follow these steps:
+To run art_gen on your local machine, follow these steps:
 
 Clone the Repo:
 
-git clone [https://github.com/your-username/neural-style-transfer.git](https://github.com/your-username/neural-style-transfer.git)
-cd neural-style-transfer
+git clone [https://github.com/your-username/art_gen.git](https://github.com/your-username/art_gen.git)
+cd art_gen
 
 
 Create a Virtual Environment:
@@ -72,9 +75,9 @@ Navigate to http://127.0.0.1:5000 in your web browser.
 
 This application is optimized for deployment on free-tier hosting (like Render or Railway).
 
-Memory Optimization: The imsize variable is set to 128 to prevent "Out of Memory" errors on CPU-only servers.
+Memory Optimization: The imsize variable in app.py is set to 128 to prevent "Out of Memory" errors on CPU-only servers.
 
-Processing Time: On a free CPU server, stylization may take 1-3 minutes. For high-resolution results, running locally on a GPU is recommended (imsize = 512).
+Processing Time: On a free CPU server, stylization may take 1–3 minutes depending on the optimization steps selected. For high-resolution results, running locally on a GPU is recommended (imsize = 512).
 
 📂 Project Structure
 
@@ -85,3 +88,8 @@ Processing Time: On a free CPU server, stylization may take 1-3 minutes. For hig
 │   └── results/        # Generated artistic images
 ├── requirements.txt    # Python dependencies
 └── README.md           # Project documentation
+
+
+📜 License
+
+Distributed under the MIT License.
