@@ -2,4 +2,5 @@ torch
 torchvision
 Pillow
 Flask
-werkzeugS
+werkzeug
+gunicorn
