@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Stylized Image</title>
+    <style>
+        /* CSS is now directly inside the HTML file */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: #ffffff;
+            padding: 2rem 3rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 900px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+
+        .submit-btn {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .submit-btn:hover {
+            background-color: #2980b9;
+        }
+
+        .results-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .image-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #fafafa;
+        }
+
+        .image-card.result {
+            border-color: #3498db;
+            border-width: 2px;
+        }
+
+        .image-card h3 {
+            margin-top: 0;
+            color: #34495e;
+        }
+
+        .image-card img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Your Masterpiece is Ready!</h1>
+        </header>
+        
+        <div class="results-gallery">
+            <div class="image-card">
+                <h3>Content Image</h3>
+                <img src="/{{ content_img }}" alt="Content Image">
+            </div>
+            <div class="image-card">
+                <h3>Style Image</h3>
+                <img src="/{{ style_img }}" alt="Style Image">
+            </div>
+            <div class="image-card result">
+                <h3>Generated Image</h3>
+                <img src="/{{ output_img }}" alt="Output Image">
+            </div>
+        </div>
+
+        <a href="/" class="submit-btn">Create Another One</a>
+    </div>
+</body>
+</html>
