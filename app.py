@@ -11,9 +11,9 @@ import torchvision.models as models
 from PIL import Image
 import copy
 import os
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
-import uuid # To generate unique filenames
+import uuid 
 
 # Flask App Configuration
 app = Flask(__name__)
@@ -29,10 +29,14 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-imsize = 256 if torch.cuda.is_available() else 128 # Smaller size for faster processing
+
+# --- CRITICAL DEPLOYMENT SETTING ---
+# We use 128px for CPU/Free-tier hosting to prevent Memory Errors (OOM).
+# If you have a powerful GPU, you can increase this to 512.
+imsize = 128 
 
 # ==============================================================================
-# PART 2: NEURAL STYLE TRANSFER MODEL CODE (Copied from previous guide)
+# PART 2: NEURAL STYLE TRANSFER MODEL CODE
 # ==============================================================================
 
 # Image loading and transforming
@@ -48,7 +52,7 @@ def image_loader(image_name):
 unloader = transforms.ToPILImage()
 
 class ContentLoss(nn.Module):
-    def __init__(self, target,):
+    def __init__(self, target):
         super(ContentLoss, self).__init__()
         self.target = target.detach()
     def forward(self, input):
@@ -70,6 +74,7 @@ class StyleLoss(nn.Module):
         self.loss = nn.functional.mse_loss(G, self.target)
         return input
 
+# Load VGG19
 cnn = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features.to(device).eval()
 
 class Normalization(nn.Module):
@@ -87,9 +92,11 @@ def get_style_model_and_losses(cnn, style_img, content_img,
     normalization_mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
     normalization_std = torch.tensor([0.229, 0.224, 0.225]).to(device)
     normalization = Normalization(normalization_mean, normalization_std).to(device)
+    
     content_losses = []
     style_losses = []
     model = nn.Sequential(normalization)
+    
     i = 0
     for layer in cnn.children():
         if isinstance(layer, nn.Conv2d):
@@ -104,6 +111,7 @@ def get_style_model_and_losses(cnn, style_img, content_img,
             name = 'bn_{}'.format(i)
         else:
             raise RuntimeError('Unrecognized layer: {}'.format(layer.__class__.__name__))
+        
         model.add_module(name, layer)
         if name in content_layers:
             target = model(content_img).detach()
@@ -115,20 +123,18 @@ def get_style_model_and_losses(cnn, style_img, content_img,
             style_loss = StyleLoss(target_feature)
             model.add_module("style_loss_{}".format(i), style_loss)
             style_losses.append(style_loss)
+
     for i in range(len(model) - 1, -1, -1):
         if isinstance(model[i], ContentLoss) or isinstance(model[i], StyleLoss):
             break
     model = model[:(i + 1)]
     return model, style_losses, content_losses
 
-def get_input_optimizer(input_img):
-    optimizer = optim.LBFGS([input_img.requires_grad_()])
-    return optimizer
-
 def run_style_transfer(cnn, content_img, style_img, input_img, num_steps=300,
                        style_weight=1000000, content_weight=1):
     model, style_losses, content_losses = get_style_model_and_losses(cnn, style_img, content_img)
-    optimizer = get_input_optimizer(input_img)
+    optimizer = optim.LBFGS([input_img.requires_grad_()])
+    
     run = [0]
     while run[0] <= num_steps:
         def closure():
@@ -141,13 +147,15 @@ def run_style_transfer(cnn, content_img, style_img, input_img, num_steps=300,
                 style_score += sl.loss
             for cl in content_losses:
                 content_score += cl.loss
+            
             style_score *= style_weight
             content_score *= content_weight
             loss = style_score + content_score
             loss.backward()
             run[0] += 1
-            return style_score + content_score
+            return loss
         optimizer.step(closure)
+    
     input_img.data.clamp_(0, 1)
     return input_img
 
@@ -167,7 +175,6 @@ def stylize():
     content_file = request.files['content_image']
     style_file = request.files['style_image']
 
-    # Secure filenames and generate unique names to avoid conflicts
     content_filename = secure_filename(f"content-{uuid.uuid4()}.png")
     style_filename = secure_filename(f"style-{uuid.uuid4()}.png")
     
@@ -176,32 +183,27 @@ def stylize():
     content_file.save(content_path)
     style_file.save(style_path)
 
-    # Get hyperparameters from form
     try:
-        num_steps = int(request.form.get('steps', 300))
+        num_steps = int(request.form.get('steps', 150)) # Default lower for web
         style_weight = int(request.form.get('style_weight', 1000000))
     except (ValueError, TypeError):
         return "Error: Invalid hyperparameter values", 400
     
-    # Load images and run the model
     content_img = image_loader(content_path)
     style_img = image_loader(style_path)
     input_img = content_img.clone()
 
     output = run_style_transfer(cnn, content_img, style_img, input_img, num_steps=num_steps, style_weight=style_weight)
 
-    # Save the output image
     output_filename = f"result-{uuid.uuid4()}.png"
     output_path = os.path.join(app.config['RESULT_FOLDER'], output_filename)
     output_image = unloader(output.squeeze(0))
     output_image.save(output_path)
     
-    # Pass relative paths for use in the template
-    content_img_url = os.path.join(app.config['UPLOAD_FOLDER'], content_filename)
-    style_img_url = os.path.join(app.config['UPLOAD_FOLDER'], style_filename)
-    output_img_url = os.path.join(app.config['RESULT_FOLDER'], output_filename)
-
-    return render_template('result.html', content_img=content_img_url, style_img=style_img_url, output_img=output_img_url)
+    return render_template('result.html', 
+                           content_img=f"static/uploads/{content_filename}", 
+                           style_img=f"static/uploads/{style_filename}", 
+                           output_img=f"static/results/{output_filename}")
 
 if __name__ == '__main__':
     app.run(debug=True)
