@@ -11,7 +11,8 @@ import torchvision.models as models
 from PIL import Image
 import copy
 import os
-from flask import Flask, render_template, request, url_for
+import gc # Garbage Collector
+from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
 import uuid 
 
@@ -27,18 +28,17 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload size
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
-# Device configuration - Force CPU for free hosting to avoid CUDA errors
+# Force CPU to save memory on free hosting
 device = torch.device("cpu")
 
-# --- DEPLOYMENT OPTIMIZATION ---
-# Using 128px keeps memory usage within the 512MB limit of free hosting
+# --- LOW MEMORY CONFIGURATION ---
+# 128px is the safest for 512MB RAM limits.
 imsize = 128 
 
 # ==============================================================================
-# PART 2: NEURAL STYLE TRANSFER MODEL CODE
+# PART 2: OPTIMIZED MODEL CODE
 # ==============================================================================
 
-# Image loading and transforming
 loader = transforms.Compose([
     transforms.Resize((imsize, imsize)),
     transforms.ToTensor()])
@@ -73,9 +73,9 @@ class StyleLoss(nn.Module):
         self.loss = nn.functional.mse_loss(G, self.target)
         return input
 
-# Load pre-trained VGG19 (features only)
-# Using weights instead of deprecated 'pretrained' argument
-cnn = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features.to(device).eval()
+# Load Model with memory cleanup
+with torch.no_grad():
+    cnn = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features.to(device).eval()
 
 class Normalization(nn.Module):
     def __init__(self, mean, std):
@@ -109,19 +109,19 @@ def get_style_model_and_losses(cnn, style_img, content_img,
             name = 'pool_{}'.format(i)
         elif isinstance(layer, nn.BatchNorm2d):
             name = 'bn_{}'.format(i)
-        else:
-            raise RuntimeError('Unrecognized layer: {}'.format(layer.__class__.__name__))
+        else: continue
         
         model.add_module(name, layer)
+        
         if name in content_layers:
             target = model(content_img).detach()
             content_loss = ContentLoss(target)
-            model.add_module("content_loss_{}".format(i), content_loss)
+            model.add_module(f"content_loss_{i}", content_loss)
             content_losses.append(content_loss)
         if name in style_layers:
             target_feature = model(style_img).detach()
             style_loss = StyleLoss(target_feature)
-            model.add_module("style_loss_{}".format(i), style_loss)
+            model.add_module(f"style_loss_{i}", style_loss)
             style_losses.append(style_loss)
 
     for i in range(len(model) - 1, -1, -1):
@@ -130,7 +130,7 @@ def get_style_model_and_losses(cnn, style_img, content_img,
     model = model[:(i + 1)]
     return model, style_losses, content_losses
 
-def run_style_transfer(cnn, content_img, style_img, input_img, num_steps=150,
+def run_style_transfer(cnn, content_img, style_img, input_img, num_steps=100,
                        style_weight=1000000, content_weight=1):
     model, style_losses, content_losses = get_style_model_and_losses(cnn, style_img, content_img)
     optimizer = optim.LBFGS([input_img.requires_grad_()])
@@ -144,13 +144,13 @@ def run_style_transfer(cnn, content_img, style_img, input_img, num_steps=150,
             style_score = sum(sl.loss for sl in style_losses)
             content_score = sum(cl.loss for cl in content_losses)
             
-            style_score *= style_weight
-            content_score *= content_weight
-            loss = style_score + content_score
+            loss = (style_score * style_weight) + (content_score * content_weight)
             loss.backward()
             run[0] += 1
             return loss
         optimizer.step(closure)
+        # Clear memory periodically
+        gc.collect()
     
     input_img.data.clamp_(0, 1)
     return input_img
@@ -165,54 +165,51 @@ def index():
 
 @app.route('/stylize', methods=['POST'])
 def stylize():
+    # Clean memory before start
+    gc.collect()
+    
     if 'content_image' not in request.files or 'style_image' not in request.files:
-        return "Error: Missing content or style image", 400
+        return "Missing images", 400
 
-    content_file = request.files['content_image']
-    style_file = request.files['style_image']
+    c_file = request.files['content_image']
+    s_file = request.files['style_image']
 
-    if content_file.filename == '' or style_file.filename == '':
-        return "Error: No files selected", 400
+    if c_file.filename == '' or s_file.filename == '':
+        return "No files selected", 400
 
-    # Generate unique filenames
-    unique_id = uuid.uuid4()
-    content_filename = secure_filename(f"c-{unique_id}.png")
-    style_filename = secure_filename(f"s-{unique_id}.png")
-    output_filename = f"r-{unique_id}.png"
+    uid = uuid.uuid4()
+    c_name, s_name, r_name = f"c-{uid}.png", f"s-{uid}.png", f"r-{uid}.png"
     
-    content_path = os.path.join(app.config['UPLOAD_FOLDER'], content_filename)
-    style_path = os.path.join(app.config['UPLOAD_FOLDER'], style_filename)
-    output_path = os.path.join(app.config['RESULT_FOLDER'], output_filename)
+    c_path = os.path.join(app.config['UPLOAD_FOLDER'], c_name)
+    s_path = os.path.join(app.config['UPLOAD_FOLDER'], s_name)
+    r_path = os.path.join(app.config['RESULT_FOLDER'], r_name)
     
-    content_file.save(content_path)
-    style_file.save(style_path)
+    c_file.save(c_path)
+    s_file.save(s_path)
 
     try:
-        # Lower default steps for hosted stability
-        num_steps = int(request.form.get('steps', 100)) 
-        style_weight = int(request.form.get('style_weight', 1000000))
-    except (ValueError, TypeError):
-        return "Error: Invalid settings", 400
+        steps = int(request.form.get('steps', 80)) # Even lower default
+        weight = int(request.form.get('style_weight', 1000000))
+    except:
+        return "Invalid settings", 400
     
-    # Run Style Transfer
-    content_img = image_loader(content_path)
-    style_img = image_loader(style_path)
-    input_img = content_img.clone()
+    c_img = image_loader(c_path)
+    s_img = image_loader(s_path)
+    i_img = c_img.clone()
 
-    output = run_style_transfer(cnn, content_img, style_img, input_img, 
-                               num_steps=num_steps, style_weight=style_weight)
+    output = run_style_transfer(cnn, c_img, s_img, i_img, num_steps=steps, style_weight=weight)
 
-    # Save output
-    output_image = unloader(output.squeeze(0))
-    output_image.save(output_path)
+    unloader(output.squeeze(0)).save(r_path)
     
-    # Use url_for to generate correct paths for the template
+    # Clean memory after processing
+    del c_img, s_img, i_img, output
+    gc.collect()
+    
     return render_template('result.html', 
-                           content_img=f"static/uploads/{content_filename}", 
-                           style_img=f"static/uploads/{style_filename}", 
-                           output_img=f"static/results/{output_filename}")
+                           content_img=f"static/uploads/{c_name}", 
+                           style_img=f"static/uploads/{s_name}", 
+                           output_img=f"static/results/{r_name}")
 
 if __name__ == '__main__':
-    # Use environment variable PORT if available (required for some hosts)
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
