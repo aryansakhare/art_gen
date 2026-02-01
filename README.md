@@ -1,13 +1,8 @@
-# art_gen
-"🎨 Turn your photos into art! This web app uses the VGG19 deep learning model to blend the content of your photos with the artistic style of famous paintings. Built with TensorFlow and Flask, it reimagines your images pixel-by-pixel to capture the textures and brushstrokes of artists like Van Gogh or Picasso."
 🎨 Neural Style Transfer (NST) Web App
-
 An interactive, AI-powered web application that uses Deep Learning to merge the content of one image with the artistic style of another. Transform your everyday photos into masterpieces inspired by Van Gogh, Picasso, and other iconic artists.
 
 🚀 Live Demo
-
-(Once you deploy, paste your Render/Railway link here)
-View Live App
+[click here](https://art-gen-84vq.onrender.com)
 
 🧐 What is Neural Style Transfer?
 
